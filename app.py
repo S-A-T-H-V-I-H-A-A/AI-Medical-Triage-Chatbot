@@ -6,37 +6,61 @@ import zipfile
 import gdown
 from transformers import BertTokenizer, BertForSequenceClassification
 
-# ---------------- DOWNLOAD + LOAD MODEL ----------------
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(page_title="AI Medical Triage Chatbot", page_icon="🩺")
+
+# ---------------- LOAD MODEL (SAFE + CACHED) ----------------
 @st.cache_resource
 def load_model():
-    if not os.path.exists("model"):
+    model_path = "model"
+
+    if not os.path.exists(model_path):
         url = "https://drive.google.com/uc?id=1GkSEN0S88XgeG7ObWeFEPFT27ZhExoC6"
         output = "model.zip"
 
-        gdown.download(url, output, quiet=False)
+        try:
+            # Download model
+            gdown.download(url, output, quiet=False, fuzzy=True)
 
-        with zipfile.ZipFile(output, 'r') as zip_ref:
-            zip_ref.extractall("model")
+            # Extract model
+            with zipfile.ZipFile(output, 'r') as zip_ref:
+                zip_ref.extractall(model_path)
 
-    tokenizer = BertTokenizer.from_pretrained("model")
-    model = BertForSequenceClassification.from_pretrained("model")
-    model.eval()
+            # Remove zip after extraction
+            os.remove(output)
+
+        except Exception as e:
+            st.error("❌ Model download failed. Check Google Drive permissions.")
+            st.stop()
+
+    try:
+        tokenizer = BertTokenizer.from_pretrained(model_path)
+        model = BertForSequenceClassification.from_pretrained(model_path)
+        model.eval()
+    except Exception:
+        st.error("❌ Model files are corrupted or missing.")
+        st.stop()
 
     return tokenizer, model
 
 # ---------------- LOAD DATA ----------------
 @st.cache_data
 def load_data():
-    symptom_df = pd.read_csv("datasets/Symptom2Disease.csv")
-    desc_df = pd.read_csv("datasets/symptom_Description.csv")
-    prec_df = pd.read_csv("datasets/symptom_precaution.csv")
-    sev_df = pd.read_csv("datasets/Symptom-severity.csv")
+    try:
+        symptom_df = pd.read_csv("datasets/Symptom2Disease.csv")
+        desc_df = pd.read_csv("datasets/symptom_Description.csv")
+        prec_df = pd.read_csv("datasets/symptom_precaution.csv")
+        sev_df = pd.read_csv("datasets/Symptom-severity.csv")
+    except Exception:
+        st.error("❌ Dataset files missing. Check datasets folder.")
+        st.stop()
+
     return symptom_df, desc_df, prec_df, sev_df
 
 symptom_df, desc_df, prec_df, sev_df = load_data()
 disease_names = symptom_df["label"].unique()
 
-# ---------------- PREDICT ----------------
+# ---------------- PREDICTION ----------------
 def predict(symptoms):
     tokenizer, model = load_model()
 
@@ -54,6 +78,7 @@ def predict(symptoms):
     precautions = prec_df[prec_df["Disease"] == disease].iloc[:, 1:].values
     precautions = precautions[0] if len(precautions) > 0 else []
 
+    # -------- Severity Calculation --------
     severity = "Unknown"
     symptoms_list = symptoms.lower().split()
     scores = []
@@ -74,35 +99,34 @@ def predict(symptoms):
 
     return disease, description, precautions, severity
 
-
 # ---------------- UI ----------------
-st.set_page_config(page_title="AI Medical Triage Chatbot", page_icon="🩺")
-
 st.title("🩺 AI Medical Triage Chatbot")
 
-user_input = st.text_input("Enter symptoms")
+st.write("Enter symptoms and get AI-based disease prediction with precautions.")
 
-if st.button("Diagnose"):
+user_input = st.text_input("🧾 Enter symptoms (e.g., fever headache cough)")
+
+if st.button("🔍 Diagnose"):
     if user_input.strip() == "":
-        st.warning("Please enter symptoms")
+        st.warning("⚠ Please enter symptoms")
     else:
-        with st.spinner("Analyzing symptoms..."):
+        with st.spinner("Analyzing symptoms... ⏳"):
             disease, description, precautions, severity = predict(user_input)
 
         st.subheader("🦠 Predicted Disease")
-        st.write(disease)
+        st.success(disease)
 
         st.subheader("📖 Description")
-        st.write(description)
+        st.info(description)
 
         st.subheader("💊 Precautions")
         for p in precautions:
             st.write("✔", p)
 
         st.subheader("⚠ Severity Level")
-        st.write(severity)
-
         if severity == "High":
-            st.error("🚑 Visit hospital immediately")
+            st.error("🚑 High Severity - Visit hospital immediately")
+        elif severity == "Medium":
+            st.warning("⚠ Medium Severity - Consult a doctor")
         else:
-            st.warning("🩹 Monitor symptoms")
+            st.success("✅ Low Severity - Monitor symptoms")
