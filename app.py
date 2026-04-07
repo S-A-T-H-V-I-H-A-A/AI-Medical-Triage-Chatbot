@@ -1,14 +1,14 @@
 import streamlit as st
 import pandas as pd
 import torch
-from transformers import BertTokenizer, BertForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-# ---------------- LOAD MODEL (OPTIMIZED) ----------------
+# ---------------- LOAD MODEL (LIGHTWEIGHT) ----------------
 @st.cache_resource
 def load_model():
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    model = BertForSequenceClassification.from_pretrained("bert-base-uncased")
-    model.eval()  # important for inference
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+    model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+    model.eval()
     return tokenizer, model
 
 tokenizer, model = load_model()
@@ -86,7 +86,7 @@ if st.button("Diagnose"):
         for p in precautions:
             st.write("✔", p)
 
-        st.subheader("⚠ Severity")
+        st.subheader("⚠ Severity Level")
         st.write(severity)
 
         if severity == "High":
