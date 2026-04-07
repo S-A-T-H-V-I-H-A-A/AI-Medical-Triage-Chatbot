@@ -3,19 +3,30 @@ import pandas as pd
 import torch
 from transformers import BertTokenizer, BertForSequenceClassification
 
-# Load datasets
-symptom_df = pd.read_csv("datasets/Symptom2Disease.csv")
-desc_df = pd.read_csv("datasets/symptom_Description.csv")
-prec_df = pd.read_csv("datasets/symptom_precaution.csv")
-sev_df = pd.read_csv("datasets/Symptom-severity.csv")
+# ---------------- LOAD MODEL (OPTIMIZED) ----------------
+@st.cache_resource
+def load_model():
+    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    model = BertForSequenceClassification.from_pretrained("bert-base-uncased")
+    model.eval()  # important for inference
+    return tokenizer, model
+
+tokenizer, model = load_model()
+
+# ---------------- LOAD DATASETS ----------------
+@st.cache_data
+def load_data():
+    symptom_df = pd.read_csv("datasets/Symptom2Disease.csv")
+    desc_df = pd.read_csv("datasets/symptom_Description.csv")
+    prec_df = pd.read_csv("datasets/symptom_precaution.csv")
+    sev_df = pd.read_csv("datasets/Symptom-severity.csv")
+    return symptom_df, desc_df, prec_df, sev_df
+
+symptom_df, desc_df, prec_df, sev_df = load_data()
 
 disease_names = symptom_df["label"].unique()
 
-# Load DEFAULT BERT (since model folder not uploaded)
-tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-model = BertForSequenceClassification.from_pretrained("bert-base-uncased")
-
-
+# ---------------- PREDICTION FUNCTION ----------------
 def predict(symptoms):
     inputs = tokenizer(symptoms, return_tensors="pt", truncation=True, padding=True)
 
@@ -52,7 +63,7 @@ def predict(symptoms):
     return disease, description, precautions, severity
 
 
-# UI
+# ---------------- UI ----------------
 st.set_page_config(page_title="AI Medical Triage Chatbot", page_icon="🩺")
 
 st.title("🩺 AI Medical Triage Chatbot")
@@ -60,22 +71,25 @@ st.title("🩺 AI Medical Triage Chatbot")
 user_input = st.text_input("Enter symptoms")
 
 if st.button("Diagnose"):
-    disease, description, precautions, severity = predict(user_input)
-
-    st.subheader("Predicted Disease")
-    st.write(disease)
-
-    st.subheader("Description")
-    st.write(description)
-
-    st.subheader("Precautions")
-    for p in precautions:
-        st.write("✔", p)
-
-    st.subheader("Severity")
-    st.write(severity)
-
-    if severity == "High":
-        st.error("Visit hospital immediately")
+    if user_input.strip() == "":
+        st.warning("Please enter symptoms")
     else:
-        st.warning("Monitor symptoms")
+        disease, description, precautions, severity = predict(user_input)
+
+        st.subheader("🦠 Predicted Disease")
+        st.write(disease)
+
+        st.subheader("📖 Description")
+        st.write(description)
+
+        st.subheader("💊 Precautions")
+        for p in precautions:
+            st.write("✔", p)
+
+        st.subheader("⚠ Severity")
+        st.write(severity)
+
+        if severity == "High":
+            st.error("🚑 Visit hospital immediately")
+        else:
+            st.warning("🩹 Monitor symptoms")
