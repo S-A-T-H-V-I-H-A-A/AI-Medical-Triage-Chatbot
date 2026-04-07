@@ -1,9 +1,30 @@
 import streamlit as st
 import pandas as pd
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import os
+import zipfile
+import gdown
+from transformers import BertTokenizer, BertForSequenceClassification
 
-# ---------------- LOAD DATASETS ----------------
+# ---------------- DOWNLOAD + LOAD MODEL ----------------
+@st.cache_resource
+def load_model():
+    if not os.path.exists("model"):
+        url = "https://drive.google.com/uc?id=1GkSEN0S88XgeG7ObWeFEPFT27ZhExoC6"
+        output = "model.zip"
+
+        gdown.download(url, output, quiet=False)
+
+        with zipfile.ZipFile(output, 'r') as zip_ref:
+            zip_ref.extractall("model")
+
+    tokenizer = BertTokenizer.from_pretrained("model")
+    model = BertForSequenceClassification.from_pretrained("model")
+    model.eval()
+
+    return tokenizer, model
+
+# ---------------- LOAD DATA ----------------
 @st.cache_data
 def load_data():
     symptom_df = pd.read_csv("datasets/Symptom2Disease.csv")
@@ -15,17 +36,9 @@ def load_data():
 symptom_df, desc_df, prec_df, sev_df = load_data()
 disease_names = symptom_df["label"].unique()
 
-# ---------------- LOAD MODEL ONLY WHEN NEEDED ----------------
-@st.cache_resource
-def load_model():
-    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-    model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
-    model.eval()
-    return tokenizer, model
-
 # ---------------- PREDICT ----------------
 def predict(symptoms):
-    tokenizer, model = load_model()   # 👈 load here (lazy)
+    tokenizer, model = load_model()
 
     inputs = tokenizer(symptoms, return_tensors="pt", truncation=True, padding=True)
 
