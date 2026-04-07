@@ -3,16 +3,6 @@ import pandas as pd
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-# ---------------- LOAD MODEL (LIGHTWEIGHT) ----------------
-@st.cache_resource
-def load_model():
-    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-    model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
-    model.eval()
-    return tokenizer, model
-
-tokenizer, model = load_model()
-
 # ---------------- LOAD DATASETS ----------------
 @st.cache_data
 def load_data():
@@ -23,11 +13,20 @@ def load_data():
     return symptom_df, desc_df, prec_df, sev_df
 
 symptom_df, desc_df, prec_df, sev_df = load_data()
-
 disease_names = symptom_df["label"].unique()
 
-# ---------------- PREDICTION FUNCTION ----------------
+# ---------------- LOAD MODEL ONLY WHEN NEEDED ----------------
+@st.cache_resource
+def load_model():
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+    model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+    model.eval()
+    return tokenizer, model
+
+# ---------------- PREDICT ----------------
 def predict(symptoms):
+    tokenizer, model = load_model()   # 👈 load here (lazy)
+
     inputs = tokenizer(symptoms, return_tensors="pt", truncation=True, padding=True)
 
     with torch.no_grad():
@@ -74,7 +73,8 @@ if st.button("Diagnose"):
     if user_input.strip() == "":
         st.warning("Please enter symptoms")
     else:
-        disease, description, precautions, severity = predict(user_input)
+        with st.spinner("Analyzing symptoms..."):
+            disease, description, precautions, severity = predict(user_input)
 
         st.subheader("🦠 Predicted Disease")
         st.write(disease)
